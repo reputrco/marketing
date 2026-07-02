@@ -1,0 +1,8 @@
+# .cursorignore
+.env
+.env.*
+**/.env
+**/.env.*
+secrets/**
+*.pem
+*.key
