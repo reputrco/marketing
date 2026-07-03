@@ -174,6 +174,28 @@ export function UploadIcon({ className }: P) {
   );
 }
 
+export function RefreshIcon({ className }: P) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...stroke}>
+      <path d="M21 2v6h-6" />
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M3 22v-6h6" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+    </svg>
+  );
+}
+
+export function SortIcon({ className }: P) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...stroke}>
+      <path d="m3 16 4 4 4-4" />
+      <path d="M7 20V4" />
+      <path d="m21 8-4-4-4 4" />
+      <path d="M17 4v16" />
+    </svg>
+  );
+}
+
 export function FilterIcon({ className }: P) {
   return (
     <svg viewBox="0 0 24 24" className={className} {...stroke}>

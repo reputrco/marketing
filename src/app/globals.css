@@ -24,6 +24,29 @@ body {
   animation: panel-in 0.22s ease-out;
 }
 
+/* indeterminate top progress bar (shown while saving) */
+@keyframes topbar {
+  0% {
+    left: -40%;
+    width: 40%;
+  }
+  50% {
+    left: 20%;
+    width: 60%;
+  }
+  100% {
+    left: 100%;
+    width: 40%;
+  }
+}
+.topbar-anim {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #0052d0, transparent);
+  animation: topbar 1.1s ease-in-out infinite;
+}
+
 /* thin, tidy scrollbars for the kanban columns */
 .scroll-slim::-webkit-scrollbar {
   width: 8px;

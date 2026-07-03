@@ -47,7 +47,7 @@ export async function proxy(request: NextRequest) {
   // Logged-in users shouldn't sit on /login.
   if (user && isAuthPage) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 

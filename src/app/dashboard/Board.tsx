@@ -24,6 +24,8 @@ import {
   SearchIcon,
   FileIcon,
   LinkIcon,
+  RefreshIcon,
+  SortIcon,
 } from "@/components/icons";
 import type { PostActivity, Source } from "@/lib/types";
 import { diffWords, diffImages, type DiffPart } from "@/lib/diff";
@@ -52,6 +54,90 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+// ---- sorting ----
+type SortKey =
+  | "created_desc"
+  | "created_asc"
+  | "scheduled_asc"
+  | "scheduled_desc"
+  | "updated_desc";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "created_desc", label: "Newest first" },
+  { key: "created_asc", label: "Oldest first" },
+  { key: "scheduled_asc", label: "Scheduled (soonest)" },
+  { key: "scheduled_desc", label: "Scheduled (latest)" },
+  { key: "updated_desc", label: "Recently updated" },
+];
+
+function sortPosts(list: Post[], key: SortKey): Post[] {
+  const by = [...list];
+  const t = (v: string | null) => (v ? new Date(v).getTime() : 0);
+  switch (key) {
+    case "created_asc":
+      return by.sort((a, b) => t(a.created_at) - t(b.created_at));
+    case "scheduled_asc":
+      return by.sort((a, b) => t(a.scheduled_at) - t(b.scheduled_at));
+    case "scheduled_desc":
+      return by.sort((a, b) => t(b.scheduled_at) - t(a.scheduled_at));
+    case "updated_desc":
+      return by.sort((a, b) => t(b.updated_at) - t(a.updated_at));
+    case "created_desc":
+    default:
+      return by.sort((a, b) => t(b.created_at) - t(a.created_at));
+  }
+}
+
+// ---- source → logo badge ----
+// Icon only (no label). SVG logos are rendered as CSS masks so we can tint them;
+// the Codex PNG is shown as-is (black).
+function SourceBadge({ source }: { source: string | null }) {
+  const s = (source ?? "").toLowerCase();
+
+  if (s.includes("codex")) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src="/sources/codex.png"
+        alt=""
+        title="Source: Codex"
+        className="ml-auto h-4 w-4 object-contain"
+      />
+    );
+  }
+
+  let mask = "/sources/user.svg";
+  let color = "#0052d0"; // brand blue for user
+  let label = "User";
+  if (s.includes("claude")) {
+    mask = "/sources/claude.svg";
+    color = "#D97757"; // Claude orange
+    label = "Claude";
+  } else if (s.includes("cursor")) {
+    mask = "/sources/cursor.svg";
+    color = "#191c1e"; // ink / black
+    label = "Cursor";
+  }
+
+  return (
+    <span
+      title={`Source: ${label}`}
+      className="ml-auto inline-block h-4 w-4"
+      style={{
+        backgroundColor: color,
+        maskImage: `url(${mask})`,
+        WebkitMaskImage: `url(${mask})`,
+        maskSize: "contain",
+        WebkitMaskSize: "contain",
+        maskRepeat: "no-repeat",
+        WebkitMaskRepeat: "no-repeat",
+        maskPosition: "center",
+        WebkitMaskPosition: "center",
+      }}
+    />
+  );
+}
+
 function filesToDataUrls(files: FileList): Promise<string[]> {
   return Promise.all(
     Array.from(files).map(
@@ -75,6 +161,11 @@ export default function Board({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  // Local copy of posts so status changes / deletes feel instant (optimistic).
+  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  useEffect(() => setPosts(initialPosts), [initialPosts]);
+
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<PostStatus | null>(null);
   const [editing, setEditing] = useState<Post | null>(null);
@@ -86,18 +177,42 @@ export default function Board({
   // remembers where a press started, to tell a click apart from a drag
   const pressPos = useRef<{ x: number; y: number } | null>(null);
 
-  // filters
+  // filters + sort
   const [showFilters, setShowFilters] = useState(false);
   const [platformFilter, setPlatformFilter] = useState<Platform | "all">("all");
   const [query, setQuery] = useState("");
-  const activeFilters = (platformFilter !== "all" ? 1 : 0) + (query.trim() ? 1 : 0);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [showSort, setShowSort] = useState(false);
+  const [sortBy, setSortBy] = useState<SortKey>("created_desc");
 
-  const visiblePosts = initialPosts.filter((p) => {
-    if (platformFilter !== "all" && p.platform !== platformFilter) return false;
-    if (query.trim() && !p.content.toLowerCase().includes(query.trim().toLowerCase()))
-      return false;
-    return true;
-  });
+  const activeFilters =
+    (platformFilter !== "all" ? 1 : 0) +
+    (query.trim() ? 1 : 0) +
+    (dateFrom || dateTo ? 1 : 0);
+
+  const visiblePosts = sortPosts(
+    posts.filter((p) => {
+      if (platformFilter !== "all" && p.platform !== platformFilter) return false;
+      if (query.trim() && !p.content.toLowerCase().includes(query.trim().toLowerCase()))
+        return false;
+      // date range on scheduled_at (fallback created_at)
+      if (dateFrom || dateTo) {
+        const d = (p.scheduled_at ?? p.created_at).slice(0, 10);
+        if (dateFrom && d < dateFrom) return false;
+        if (dateTo && d > dateTo) return false;
+      }
+      return true;
+    }),
+    sortBy,
+  );
+
+  function clearFilters() {
+    setPlatformFilter("all");
+    setQuery("");
+    setDateFrom("");
+    setDateTo("");
+  }
 
   async function copy(post: Post) {
     try {
@@ -109,6 +224,7 @@ export default function Board({
     }
   }
 
+  // Non-optimistic runner (panel save, restore) — waits, then refreshes.
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
     startTransition(async () => {
@@ -118,16 +234,53 @@ export default function Board({
     });
   }
 
+  // Optimistic runner — update the UI now, persist in the background, resync after.
+  function optimistic(
+    mutate: (list: Post[]) => Post[],
+    fn: () => Promise<ActionResult>,
+  ) {
+    setError(null);
+    setPosts((prev) => mutate(prev));
+    startTransition(async () => {
+      const res = await fn();
+      if (!res.ok) setError(res.error ?? "Something went wrong");
+      router.refresh(); // confirms (or reverts) against the DB
+    });
+  }
+
+  function changeStatus(id: string, status: PostStatus) {
+    optimistic(
+      (list) => list.map((p) => (p.id === id ? { ...p, status } : p)),
+      () => updatePostStatus(id, status),
+    );
+  }
+
+  function removePost(id: string) {
+    optimistic(
+      (list) => list.filter((p) => p.id !== id),
+      () => deletePost(id),
+    );
+  }
+
+  function refresh() {
+    setError(null);
+    startTransition(() => router.refresh());
+  }
+
   function onDrop(status: PostStatus) {
-    if (dragId) run(() => updatePostStatus(dragId, status));
+    if (dragId) changeStatus(dragId, status);
     setDragId(null);
     setOverCol(null);
   }
 
   return (
     <div>
+      {/* top progress bar while saving/refreshing */}
+      <div className="fixed inset-x-0 top-0 z-[60] h-0.5 overflow-hidden">
+        {pending && <div className="topbar-anim" />}
+      </div>
+
       <div className="mb-5 flex items-center gap-3">
-        {pending && <span className="text-sm text-ink-subtle">Saving…</span>}
         {error && (
           <span className="rounded-md bg-danger-soft px-2.5 py-1 text-sm text-danger">
             {error}
@@ -135,11 +288,47 @@ export default function Board({
         )}
         {activeFilters > 0 && (
           <span className="text-sm text-ink-subtle">
-            Showing {visiblePosts.length} of {initialPosts.length}
+            Showing {visiblePosts.length} of {posts.length}
           </span>
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          <div className="relative">
+            <button
+              onClick={() => setShowSort((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                showSort
+                  ? "border-brand bg-brand-soft text-brand-dark"
+                  : "border-surface-line bg-white text-ink-muted hover:border-brand/40"
+              }`}
+            >
+              <SortIcon className="h-4 w-4" />
+              Sort
+            </button>
+            {showSort && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
+                <div className="absolute right-0 z-40 mt-2 w-52 rounded-xl border border-surface-line bg-surface-card p-1.5 shadow-elevated">
+                  {SORT_OPTIONS.map((o) => (
+                    <button
+                      key={o.key}
+                      onClick={() => {
+                        setSortBy(o.key);
+                        setShowSort(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition hover:bg-surface-sunk ${
+                        sortBy === o.key ? "font-semibold text-brand" : "text-ink-muted"
+                      }`}
+                    >
+                      {o.label}
+                      {sortBy === o.key && <CheckIcon className="h-4 w-4" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
           <button
             onClick={() => setShowDocs(true)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-surface-line bg-white px-3 py-2 text-sm font-medium text-ink-muted transition hover:border-brand/40"
@@ -160,7 +349,7 @@ export default function Board({
               <FilterIcon className="h-4 w-4" />
               Filters
               {activeFilters > 0 && (
-                <span className="rounded-full bg-brand px-1.5 text-[11px] font-semibold text-white">
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-brand text-[10px] font-semibold leading-none text-white">
                   {activeFilters}
                 </span>
               )}
@@ -169,8 +358,8 @@ export default function Board({
             {showFilters && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setShowFilters(false)} />
-                <div className="absolute right-0 z-40 mt-2 w-72 rounded-xl border border-surface-line bg-surface-card p-4 shadow-elevated">
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+                <div className="absolute right-0 z-40 mt-2 w-96 rounded-xl border border-surface-line bg-surface-card p-4 shadow-elevated">
+                  <label className="mb-1.5 block text-xs font-semibold tracking-wide text-ink-subtle">
                     Search
                   </label>
                   <div className="relative mb-4">
@@ -183,7 +372,7 @@ export default function Board({
                     />
                   </div>
 
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+                  <label className="mb-1.5 block text-xs font-semibold tracking-wide text-ink-subtle">
                     Platform
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -213,12 +402,28 @@ export default function Board({
                     ))}
                   </div>
 
+                  <label className="mb-1.5 mt-4 block text-xs font-semibold tracking-wide text-ink-subtle">
+                    Date range
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="w-full rounded-lg border border-surface-line bg-white px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    />
+                    <span className="text-xs text-ink-subtle">to</span>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="w-full rounded-lg border border-surface-line bg-white px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    />
+                  </div>
+
                   {activeFilters > 0 && (
                     <button
-                      onClick={() => {
-                        setPlatformFilter("all");
-                        setQuery("");
-                      }}
+                      onClick={clearFilters}
                       className="mt-4 w-full rounded-lg border border-surface-line py-1.5 text-sm font-medium text-ink-muted hover:border-brand/40"
                     >
                       Clear filters
@@ -228,7 +433,14 @@ export default function Board({
               </>
             )}
           </div>
-
+          <button
+            onClick={refresh}
+            title="Refresh"
+            aria-label="Refresh"
+            className="inline-flex items-center justify-center rounded-lg border border-surface-line bg-white p-2 text-ink-muted transition hover:border-brand/40"
+          >
+            <RefreshIcon className={`h-4 w-4 ${pending ? "animate-spin" : ""}`} />
+          </button>
           <button
             onClick={() => setCreating(true)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
@@ -307,11 +519,7 @@ export default function Board({
                             {p.sources.length}
                           </span>
                         )}
-                        {p.source && p.source !== "manual" && (
-                          <span className="ml-auto rounded bg-surface-sunk px-1.5 py-0.5 text-[10px] text-ink-subtle">
-                            {p.source}
-                          </span>
-                        )}
+                        <SourceBadge source={p.source} />
                       </div>
 
                       <p className="mb-3 whitespace-pre-wrap text-sm leading-snug text-ink-muted line-clamp-5">
@@ -333,21 +541,20 @@ export default function Board({
                             <CopyIcon className="h-4 w-4" />
                           )}
                         </IconBtn>
-                        {p.status !== "cancelled" && (
+                        {/* {p.status !== "cancelled" && (
                           <IconBtn
                             label="Cancel"
-                            onClick={() => run(() => updatePostStatus(p.id, "cancelled"))}
+                            onClick={() => changeStatus(p.id, "cancelled")}
                           >
                             <BanIcon className="h-4 w-4" />
                           </IconBtn>
-                        )}
+                        )} */}
                         <IconBtn
                           label="Delete"
                           danger
                           className="ml-auto"
                           onClick={() => {
-                            if (confirm("Delete this post permanently?"))
-                              run(() => deletePost(p.id));
+                            if (confirm("Delete this post permanently?")) removePost(p.id);
                           }}
                         >
                           <TrashIcon className="h-4 w-4 text-danger" />

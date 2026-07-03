@@ -39,7 +39,7 @@ export async function createPost(input: {
 
   if (IS_MOCK) {
     const res = mockCreate(input);
-    revalidatePath("/dashboard");
+    revalidatePath("/");
     return res;
   }
 
@@ -78,7 +78,7 @@ export async function createPost(input: {
     await supabase.from("posts").update({ media_urls: finalUrls }).eq("id", input.id);
   }
 
-  revalidatePath("/dashboard");
+  revalidatePath("/");
   return { ok: true };
 }
 
@@ -87,7 +87,7 @@ export async function updatePostStatus(id: string, status: PostStatus): Promise<
 
   if (IS_MOCK) {
     const res = mockUpdateStatus(id, status);
-    revalidatePath("/dashboard");
+    revalidatePath("/");
     return res;
   }
 
@@ -122,7 +122,7 @@ export async function updatePostStatus(id: string, status: PostStatus): Promise<
     }
   }
 
-  revalidatePath("/dashboard");
+  revalidatePath("/");
   return { ok: true };
 }
 
@@ -137,7 +137,7 @@ export async function updatePost(
 ): Promise<ActionResult> {
   if (IS_MOCK) {
     const res = mockUpdate(id, patch);
-    revalidatePath("/dashboard");
+    revalidatePath("/");
     return res;
   }
 
@@ -197,7 +197,7 @@ export async function updatePost(
     return { ok: false, error: error.message };
   }
 
-  revalidatePath("/dashboard");
+  revalidatePath("/");
   return { ok: true };
 }
 
@@ -223,7 +223,7 @@ export async function getPostEdits(id: string): Promise<PostActivity[]> {
 export async function deletePost(id: string): Promise<ActionResult> {
   if (IS_MOCK) {
     const res = mockDelete(id);
-    revalidatePath("/dashboard");
+    revalidatePath("/");
     return res;
   }
 
@@ -251,7 +251,7 @@ export async function deletePost(id: string): Promise<ActionResult> {
   const paths = ownedStoragePaths(Array.from(new Set(all)));
   if (paths.length) await supabase.storage.from(POST_IMAGES_BUCKET).remove(paths);
 
-  revalidatePath("/dashboard");
+  revalidatePath("/");
   return { ok: true };
 }
 
