@@ -71,10 +71,6 @@ export default function LoginPage() {
         >
           {loading ? "Signing in…" : "Sign in"}
         </button>
-
-        <p className="mt-4 text-xs text-ink-subtle">
-          Accounts are created in the Supabase dashboard (Authentication → Users).
-        </p>
       </form>
     </main>
   );
