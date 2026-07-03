@@ -180,26 +180,36 @@ export default function Board({
   const [showFilters, setShowFilters] = useState(false);
   const [platformFilter, setPlatformFilter] = useState<Platform | "all">("all");
   const [query, setQuery] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [schedFrom, setSchedFrom] = useState("");
+  const [schedTo, setSchedTo] = useState("");
   const [showSort, setShowSort] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("created_desc");
 
   const activeFilters =
     (platformFilter !== "all" ? 1 : 0) +
     (query.trim() ? 1 : 0) +
-    (dateFrom || dateTo ? 1 : 0);
+    (createdFrom || createdTo ? 1 : 0) +
+    (schedFrom || schedTo ? 1 : 0);
 
   const visiblePosts = sortPosts(
     posts.filter((p) => {
       if (platformFilter !== "all" && p.platform !== platformFilter) return false;
       if (query.trim() && !p.content.toLowerCase().includes(query.trim().toLowerCase()))
         return false;
-      // date range on scheduled_at (fallback created_at)
-      if (dateFrom || dateTo) {
-        const d = (p.scheduled_at ?? p.created_at).slice(0, 10);
-        if (dateFrom && d < dateFrom) return false;
-        if (dateTo && d > dateTo) return false;
+      // created date range
+      if (createdFrom || createdTo) {
+        const c = p.created_at.slice(0, 10);
+        if (createdFrom && c < createdFrom) return false;
+        if (createdTo && c > createdTo) return false;
+      }
+      // scheduled date range (posts without a scheduled date are excluded)
+      if (schedFrom || schedTo) {
+        if (!p.scheduled_at) return false;
+        const sd = p.scheduled_at.slice(0, 10);
+        if (schedFrom && sd < schedFrom) return false;
+        if (schedTo && sd > schedTo) return false;
       }
       return true;
     }),
@@ -209,8 +219,10 @@ export default function Board({
   function clearFilters() {
     setPlatformFilter("all");
     setQuery("");
-    setDateFrom("");
-    setDateTo("");
+    setCreatedFrom("");
+    setCreatedTo("");
+    setSchedFrom("");
+    setSchedTo("");
   }
 
   async function copy(post: Post) {
@@ -402,20 +414,39 @@ export default function Board({
                   </div>
 
                   <label className="mb-1.5 mt-4 block text-xs font-semibold tracking-wide text-ink-subtle">
-                    Date range
+                    Created date
                   </label>
                   <div className="flex items-center gap-2">
                     <input
                       type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
+                      value={createdFrom}
+                      onChange={(e) => setCreatedFrom(e.target.value)}
                       className="w-full rounded-lg border border-surface-line bg-white px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                     />
                     <span className="text-xs text-ink-subtle">to</span>
                     <input
                       type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
+                      value={createdTo}
+                      onChange={(e) => setCreatedTo(e.target.value)}
+                      className="w-full rounded-lg border border-surface-line bg-white px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    />
+                  </div>
+
+                  <label className="mb-1.5 mt-4 block text-xs font-semibold tracking-wide text-ink-subtle">
+                    Scheduled date
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={schedFrom}
+                      onChange={(e) => setSchedFrom(e.target.value)}
+                      className="w-full rounded-lg border border-surface-line bg-white px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    />
+                    <span className="text-xs text-ink-subtle">to</span>
+                    <input
+                      type="date"
+                      value={schedTo}
+                      onChange={(e) => setSchedTo(e.target.value)}
                       className="w-full rounded-lg border border-surface-line bg-white px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                     />
                   </div>
@@ -536,11 +567,9 @@ export default function Board({
                     <div className="p-3">
                       <div className="mb-2 flex items-center gap-2">
                         <PlatformIcon platform={p.platform} className="h-4 w-4" />
-                        {fmtDate(p.scheduled_at) && (
-                          <span className="text-[11px] font-semibold">
-                            {fmtDate(p.scheduled_at)}
-                          </span>
-                        )}
+                        <span className="text-[11px] font-semibold" title="Created">
+                          {fmtDate(p.created_at)}
+                        </span>
                         {(p.sources?.length ?? 0) > 0 && (
                           <span
                             className="inline-flex items-center gap-0.5 text-[10px] text-ink-subtle"
@@ -556,6 +585,14 @@ export default function Board({
                       <p className="whitespace-pre-wrap text-sm leading-snug text-ink-muted line-clamp-5">
                         {p.content}
                       </p>
+                      {p.scheduled_at && (
+                        <p className="mt-2 text-[11px] text-ink-subtle">
+                          Schedule at:{" "}
+                          <span className="font-medium text-ink-muted">
+                            {fmtDate(p.scheduled_at)}
+                          </span>
+                        </p>
+                      )}
                     </div>
                   </article>
                 ))}
@@ -1051,9 +1088,23 @@ function PostPanel({
           ) : (
             <PlusIcon className="h-5 w-5 text-brand" />
           )}
-          <h2 className="text-base font-semibold text-ink">
-            {post ? "Post details" : "New post"}
-          </h2>
+          <div>
+            <h2 className="text-base font-semibold leading-tight text-ink">
+              {post ? "Post details" : "New post"}
+            </h2>
+            {post && (
+              <p className="text-xs text-ink-subtle">
+                Created at{" "}
+                {new Date(post.created_at).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            )}
+          </div>
           <div className="ml-auto flex items-center gap-1">
             {post && onShowHistory && (
               <IconBtn
