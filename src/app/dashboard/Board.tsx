@@ -48,9 +48,9 @@ const STATUS_STYLE: Record<PostStatus, { dot: string; pill: string }> = {
   cancelled: { dot: "bg-danger", pill: "bg-danger-soft text-danger" },
 };
 
-function fmtDate(d: string | null) {
+function fmtDate(d: string | null, showTime: boolean = false) {
   if (!d) return null;
-  return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", ...(showTime ? { hour: "2-digit", minute: "2-digit", hour12: true } : {}) });
 }
 
 // ---- sorting ----
@@ -567,8 +567,8 @@ export default function Board({
                     <div className="p-3">
                       <div className="mb-2 flex items-center gap-2">
                         <PlatformIcon platform={p.platform} className="h-4 w-4" />
-                        <span className="text-[11px] font-semibold" title="Created">
-                          {fmtDate(p.created_at)}
+                        <span className="text-[11px] font-medium" title="Created">
+                          {fmtDate(p.created_at, true)}
                         </span>
                         {(p.sources?.length ?? 0) > 0 && (
                           <span
