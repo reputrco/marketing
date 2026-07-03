@@ -39,8 +39,11 @@ export default async function HomePage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo/logo-mini.png" alt="Logo" className="h-10 w-10 object-contain" />
           <div>
-            <h1 className="font-display text-xl font-bold text-ink">Content Portal</h1>
-            <p className="text-sm text-ink-subtle">{posts.length} posts in the pipeline</p>
+            <h1 className="font-display text-xl font-bold text-ink">Marketing Content Portal</h1>
+            <p className="text-sm text-ink-subtle">
+              {posts.filter((p) => p.status !== "posted" && p.status !== "cancelled").length}{" "}
+              posts in the pipeline
+            </p>
           </div>
         </div>
 
