@@ -14,7 +14,6 @@ import {
 import {
   PlatformIcon,
   TrashIcon,
-  BanIcon,
   CloseIcon,
   PlusIcon,
   CopyIcon,
@@ -496,10 +495,42 @@ export default function Board({
                       // ignore if the pointer moved (i.e. it was a drag)
                       if (Math.hypot(e.clientX - s.x, e.clientY - s.y) < 6) setEditing(p);
                     }}
-                    className={`group shrink-0 cursor-pointer overflow-hidden rounded-lg border border-surface-line bg-surface-card transition hover:border-slate-300 active:cursor-grabbing ${
+                    className={`group relative shrink-0 cursor-pointer overflow-hidden rounded-lg border border-surface-line bg-surface-card transition hover:border-slate-300 active:cursor-grabbing ${
                       dragId === p.id ? "opacity-50" : ""
                     }`}
                   >
+                    {/* hover actions: copy + delete */}
+                    <div
+                      className="absolute right-1.5 top-1.5 z-10 flex gap-1 opacity-0 transition group-hover:opacity-100"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        title={copiedId === p.id ? "Copied!" : "Copy text"}
+                        aria-label="Copy text"
+                        onClick={() => copy(p)}
+                        className="rounded-md border border-surface-line bg-white/90 p-[5px] text-ink-subtle shadow-sm backdrop-blur transition hover:text-ink"
+                      >
+                        {copiedId === p.id ? (
+                          <CheckIcon className="h-3 w-3 text-grass" />
+                        ) : (
+                          <CopyIcon className="h-3 w-3" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete"
+                        aria-label="Delete"
+                        onClick={() => {
+                          if (confirm("Delete this post permanently?")) removePost(p.id);
+                        }}
+                        className="rounded-md border border-surface-line bg-white/90 p-[5px] text-danger shadow-sm backdrop-blur transition hover:bg-danger-soft"
+                      >
+                        <TrashIcon className="h-3 w-3" />
+                      </button>
+                    </div>
+
                     <CardImages urls={p.media_urls} />
 
                     <div className="p-3">
@@ -522,44 +553,9 @@ export default function Board({
                         <SourceBadge source={p.source} />
                       </div>
 
-                      <p className="mb-3 whitespace-pre-wrap text-sm leading-snug text-ink-muted line-clamp-5">
+                      <p className="whitespace-pre-wrap text-sm leading-snug text-ink-muted line-clamp-5">
                         {p.content}
                       </p>
-
-                      <div
-                        className="flex items-center gap-1 border-t border-surface-line pt-2"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <IconBtn
-                          label={copiedId === p.id ? "Copied!" : "Copy text"}
-                          onClick={() => copy(p)}
-                        >
-                          {copiedId === p.id ? (
-                            <CheckIcon className="h-4 w-4 text-grass" />
-                          ) : (
-                            <CopyIcon className="h-4 w-4" />
-                          )}
-                        </IconBtn>
-                        {/* {p.status !== "cancelled" && (
-                          <IconBtn
-                            label="Cancel"
-                            onClick={() => changeStatus(p.id, "cancelled")}
-                          >
-                            <BanIcon className="h-4 w-4" />
-                          </IconBtn>
-                        )} */}
-                        <IconBtn
-                          label="Delete"
-                          danger
-                          className="ml-auto"
-                          onClick={() => {
-                            if (confirm("Delete this post permanently?")) removePost(p.id);
-                          }}
-                        >
-                          <TrashIcon className="h-4 w-4 text-danger" />
-                        </IconBtn>
-                      </div>
                     </div>
                   </article>
                 ))}
@@ -586,6 +582,16 @@ export default function Board({
             setEditing(null);
           }}
           onShowHistory={editing ? () => setHistory(editing) : undefined}
+          onDelete={
+            editing
+              ? () => {
+                  if (confirm("Delete this post permanently?")) {
+                    removePost(editing.id);
+                    setEditing(null);
+                  }
+                }
+              : undefined
+          }
           onSubmit={async (data) => {
             const res = editing
               ? await updatePost(editing.id, {
@@ -949,12 +955,14 @@ function PostPanel({
   isMock,
   onClose,
   onShowHistory,
+  onDelete,
   onSubmit,
 }: {
   post?: Post;
   isMock: boolean;
   onClose: () => void;
   onShowHistory?: () => void;
+  onDelete?: () => void;
   onSubmit: (data: ModalData) => Promise<ActionResult>;
 }) {
   // Stable id for this post — existing id, or a new one used as the storage folder.
@@ -1228,21 +1236,37 @@ function PostPanel({
 
         <footer className="border-t border-surface-line px-5 py-4">
           {saveError && <p className="mb-2 text-sm text-danger">{saveError}</p>}
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={handleClose}
-              disabled={saving}
-              className="rounded-lg border border-surface-line px-4 py-2 text-sm font-medium text-ink-muted disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || uploading}
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
-            >
-              {saving ? "Saving…" : post ? "Save changes" : "Create"}
-            </button>
+          <div className="flex items-center justify-between gap-3">
+            {post && onDelete ? (
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={saving}
+                title="Delete post"
+                aria-label="Delete post"
+                className="rounded-lg border border-surface-line p-2 text-danger transition hover:bg-danger-soft disabled:opacity-50"
+              >
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={handleClose}
+                disabled={saving}
+                className="rounded-lg border border-surface-line px-4 py-2 text-sm font-medium text-ink-muted disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || uploading}
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
+              >
+                {saving ? "Saving…" : post ? "Save changes" : "Create"}
+              </button>
+            </div>
           </div>
         </footer>
       </aside>
