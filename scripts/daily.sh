@@ -10,9 +10,15 @@
 
 set -euo pipefail
 
-# launchd/cron use a minimal PATH — make sure the CLIs + node are found.
-# If `which claude` (or node) prints a different dir, add it here.
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+# launchd/manual shells use a minimal PATH — the agent CLIs may be installed via
+# nvm, npm -g, or the native installer, none of which are on that PATH.
+# 1) Pull in your real interactive shell PATH (covers nvm / homebrew / custom dirs).
+if command -v zsh >/dev/null 2>&1; then
+  USER_PATH="$(zsh -lic 'print -rn -- $PATH' 2>/dev/null || true)"
+  [ -n "$USER_PATH" ] && export PATH="$USER_PATH:$PATH"
+fi
+# 2) Add the usual install locations as a fallback.
+export PATH="$HOME/.local/bin:$HOME/.claude/local:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # Always run from the repo root so .env, skills, and scripts resolve.
 cd "$(dirname "$0")/.."
@@ -24,13 +30,19 @@ echo "=== $(date '+%Y-%m-%d %H:%M:%S') daily run start (agent: $AGENT) ==="
 
 case "$AGENT" in
   claude)
+    # One-time: run `claude` once interactively IN THIS FOLDER and accept the
+    # "trust this folder" prompt, or the headless run below will hang on it.
+    # --allowedTools pre-authorizes every tool the job needs so it never prompts.
     claude -p "$PROMPT" \
-      --allowedTools "Read" "WebSearch" "Bash(node scripts/push-post.mjs *)"
+      --allowedTools "Read,Write,Edit,Bash,WebSearch,Glob,Grep"
     ;;
   cursor)
-    cursor-agent -p "$PROMPT"
+    # -f trusts this directory (headless can't answer the trust prompt).
+    # If it still pauses to approve running commands, use --yolo instead of -f.
+    cursor-agent -p "$PROMPT" -f
     ;;
   codex)
+    # NOTE: requires the Codex CLI installed (`npm i -g @openai/codex`).
     codex exec --sandbox danger-full-access "$PROMPT"
     ;;
   *)
