@@ -50,7 +50,7 @@ const STATUS_STYLE: Record<PostStatus, { dot: string; pill: string }> = {
 
 function fmtDate(d: string | null) {
   if (!d) return null;
-  return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 // ---- sorting ----
@@ -537,7 +537,7 @@ export default function Board({
                       <div className="mb-2 flex items-center gap-2">
                         <PlatformIcon platform={p.platform} className="h-4 w-4" />
                         {fmtDate(p.scheduled_at) && (
-                          <span className="text-[11px] text-ink-subtle">
+                          <span className="text-[11px] font-semibold">
                             {fmtDate(p.scheduled_at)}
                           </span>
                         )}
