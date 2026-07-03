@@ -36,19 +36,17 @@ Key properties:
 
 ## 2. What you need (once)
 
-Two values, kept as environment variables wherever your agent runs:
-
-| Variable | Value |
-|----------|-------|
-| `PORTAL_URL` | Your deployment, e.g. `https://reputr-content.vercel.app` (or `http://localhost:3003` in dev) |
-| `PORTAL_TOKEN` | The same secret as `PORTAL_API_TOKEN` in the portal's env (Vercel → Settings → Environment Variables). Generate with `openssl rand -hex 32`. |
-
-Never commit these. Export them in your shell / agent config:
+Both values live in the repo's **`.env`** (gitignored) — the push script reads them
+itself, so **agents don't export anything**:
 
 ```bash
-export PORTAL_URL="https://your-portal.vercel.app"
-export PORTAL_TOKEN="paste-the-secret"
+# .env  (in the marketing repo root)
+PORTAL_URL=https://reputr-marketing.netlify.app   # or http://localhost:3003 in dev
+PORTAL_API_TOKEN=<the same secret the portal uses>
 ```
+
+`scripts/push-post.mjs` (and `.sh`) auto-load `PORTAL_URL` and `PORTAL_API_TOKEN` from
+`.env`. Real environment variables, if set, still take precedence. Never commit `.env`.
 
 ---
 
@@ -102,28 +100,27 @@ Also removes the post's uploaded images from storage.
 
 ## 4. Using the skills
 
-The `reputr-marketing` plugin ships skills that write the content. The most relevant
-for this workflow:
+The marketing skills are **vendored in this repo**, so every tool reads them locally —
+no plugin install, no downloading from the portal:
+
+- **Claude** → `.claude/skills/<skill>/SKILL.md`
+- **Codex / Cursor** → `.agents/skills/<skill>/SKILL.md`
+
+(Both folders hold the same skills.) The most relevant for this workflow:
 
 - **`social`** — LinkedIn / X / Facebook posts, threads, hooks, repurposing.
 - **`copywriting`** — sharpening a specific line or CTA.
 - **`content-strategy`** — deciding *what* to post (themes, angles).
-- **`product-marketing`** — creates/maintains the positioning & ICP context doc.
+- **`product-marketing`** — the positioning & ICP context doc.
 
-**Context files** (upload these to the portal's **Docs** panel so anyone can grab them):
-
-- `PRODUCT.md` — what Reputr is, who it's for, the core value props.
-- Any brand/voice or ICP notes.
+**Context file:** keep `PRODUCT.md` in the repo (what Reputr is, ICP, value props).
 
 ### Invoking skills per tool
 
-- **Claude (Cowork / Claude Code):** the `social` skill triggers automatically when you
-  ask for a social post ("write a LinkedIn post about …"). If the plugin is installed,
-  just describe the post. To force it, mention the platform and "post".
-- **Codex / Cursor:** these don't have Claude's skill system. Instead, **download
-  `PRODUCT.md` (and any skill/brief files) from the portal Docs panel** and paste them
-  into the prompt as context, then ask for the post. The skill content becomes your
-  instructions.
+- **Claude (Cowork / Claude Code):** the `social` skill in `.claude/skills/` triggers
+  automatically when you ask for a social post. Just describe the post.
+- **Codex / Cursor:** point the agent at `.agents/skills/social/SKILL.md` (and
+  `PRODUCT.md`) as context, then ask for the post. The skill content is your instructions.
 
 Either way, the generation step ends with plain post text you then push in §6.
 
@@ -151,33 +148,39 @@ Generate one post per platform when you want the full set (LinkedIn, X, Facebook
 
 ## 6. How to push the post to the portal
 
-### Option A — curl (any tool, any shell)
+### Option A — the bundled Node script (recommended)
+
+`scripts/push-post.mjs` (Node 18+, no dependencies) reads `PORTAL_URL` and the token
+from `.env` itself — **nothing to export**:
 
 ```bash
+node scripts/push-post.mjs --platform linkedin \
+  --content "Your generated post text here…" \
+  --date 2026-07-05 --source claude-daily \
+  --sources '[{"url":"https://…","title":"…"}]'
+```
+
+There's also `scripts/push-post.sh` (curl-based) with the same `.env` auto-loading.
+
+### Option B — raw curl
+
+Load `.env` first, then call the endpoint directly:
+
+```bash
+set -a; source .env; set +a   # loads PORTAL_URL + PORTAL_API_TOKEN
+
 curl -sS -X POST "$PORTAL_URL/api/posts" \
-  -H "Authorization: Bearer $PORTAL_TOKEN" \
+  -H "Authorization: Bearer $PORTAL_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "platform": "linkedin",
     "content": "Your generated post text here…",
     "status": "draft",
     "scheduled_at": "2026-07-05T09:00:00Z",
-    "source": "claude-daily"
+    "source": "claude-daily",
+    "sources": [{"url":"https://…","title":"…"}]
   }'
 ```
-
-### Option B — the bundled Node script (recommended)
-
-The repo ships `scripts/push-post.mjs` (Node 18+, no dependencies):
-
-```bash
-PORTAL_URL="$PORTAL_URL" PORTAL_TOKEN="$PORTAL_TOKEN" \
-  node scripts/push-post.mjs --platform linkedin \
-  --content "Your generated post text here…" \
-  --date 2026-07-05 --source claude-daily
-```
-
-There's also `scripts/push-post.sh` (curl-based) with the same arguments.
 
 ### Per-tool automation
 
@@ -194,18 +197,19 @@ Dedicated step-by-step guides live alongside this file:
    executes the `node scripts/push-post.mjs …` calls itself.
 
 **Codex (CLI / automations):**
-1. Feed `PRODUCT.md` as context and ask Codex to generate the post text.
-2. Codex runs the same shell command to push:
+1. Point Codex at `.agents/skills/social/SKILL.md` + `PRODUCT.md` for context and ask it
+   to generate the post text.
+2. Codex runs the push (script auto-loads `.env`):
    ```bash
-   PORTAL_URL=… PORTAL_TOKEN=… node scripts/push-post.mjs --platform x --content "…" --source codex-daily
+   node scripts/push-post.mjs --platform x --content "…" --source codex-daily
    ```
    Schedule it with `cron`, a systemd timer, or a Codex automation that runs daily.
 
 **Cursor (agent / terminal):**
-1. Open the repo, paste `PRODUCT.md` context, ask the Cursor agent to draft the post.
-2. Let it run the push command in Cursor's integrated terminal (same command as above,
-   `--source cursor`). For hands-off runs, Cursor background agents can execute the
-   script on a schedule.
+1. Open the repo; the Cursor agent reads `.agents/skills/social/SKILL.md` + `PRODUCT.md`
+   from the workspace and drafts the post.
+2. Let it run the push in Cursor's integrated terminal (same command, `--source cursor`).
+   For hands-off runs, Cursor background agents can execute the script on a schedule.
 
 All three converge on the **same** `POST /api/posts` call — the only difference is the
 `source` label you pass, so you can see on the board where each post came from.

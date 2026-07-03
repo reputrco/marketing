@@ -67,21 +67,30 @@ npm run dev        # http://localhost:3000  → redirects to /login
 - Import the repo in Vercel, set the same env vars in Project Settings → Environment Variables.
 - Deploy. Your portal is at `https://<project>.vercel.app`.
 
-## Pushing posts (from Claude, Codex, or a cron)
+## Pushing posts (from Claude, Codex, Cursor, or a cron)
+
+The scripts read `PORTAL_URL` + `PORTAL_API_TOKEN` from `.env` automatically — nothing
+to export. Set them once in `.env` (repo root):
+
+```
+PORTAL_URL=https://reputr-marketing.netlify.app   # or http://localhost:3003 in dev
+PORTAL_API_TOKEN=<the same secret the portal uses>
+```
 
 Node (recommended):
 ```bash
-PORTAL_URL=https://your-portal.vercel.app PORTAL_TOKEN=xxxx \
-  node scripts/push-post.mjs --platform linkedin --content "Post text" --source claude-daily
+node scripts/push-post.mjs --platform linkedin --content "Post text" --source claude-daily \
+  --sources '[{"url":"https://…","title":"…"}]'
 ```
 
 Bash/curl:
 ```bash
-PORTAL_URL=https://your-portal.vercel.app PORTAL_TOKEN=xxxx \
-  ./scripts/push-post.sh linkedin "Post text" 2026-07-01 claude-daily
+./scripts/push-post.sh linkedin "Post text" 2026-07-01 claude-daily
 ```
 
-Both hit the same endpoint, so Claude and Codex push identically.
+Both hit the same endpoint, so all three agents push identically. The marketing skills
+they use are vendored in the repo: `.claude/skills/` (Claude) and `.agents/skills/`
+(Codex / Cursor).
 
 ## Daily automation
 

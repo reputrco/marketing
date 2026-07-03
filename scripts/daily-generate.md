@@ -5,9 +5,11 @@ one post per platform, and pushes each to the portal. Dedup is automatic, so re-
 are safe.
 
 Before running, the agent needs:
-- `PORTAL_URL` and `PORTAL_TOKEN` in the environment.
 - **Web access enabled** (this prompt requires browsing).
-- Context: `PRODUCT.md` (and any brand-voice notes) — from the repo or the portal Docs panel.
+- Nothing to export: `scripts/push-post.mjs` reads `PORTAL_URL` and the token from the
+  repo's `.env` (`PORTAL_URL` + `PORTAL_API_TOKEN`) automatically.
+- Context: `PRODUCT.md` in this repo. The marketing skills also live **in this repo** —
+  `.claude/skills/` (Claude) and `.agents/skills/` (Codex / Cursor). Use them.
 - A `SOURCE` label for traceability: use `claude-daily`, `codex-daily`, or `cursor`.
 
 ---
@@ -16,7 +18,8 @@ You are generating Reputr's daily social posts. Follow these steps in order.
 
 ## Step 1 — Load context
 Read `PRODUCT.md` (product, audience/ICP, value props) and any brand-voice notes.
-Match that voice in everything you write.
+Use the relevant marketing skill in this repo — e.g. `.claude/skills/social/SKILL.md`
+(Claude) or `.agents/skills/social/SKILL.md` (Codex/Cursor). Match that voice.
 
 ## Step 2 — Research first (required)
 Before writing anything, **browse the web** for recent, quantitative information
@@ -46,21 +49,18 @@ Keep post text clean; you may add a short `Source: <publisher>` line on LinkedIn
 it strengthens credibility, but don't dump raw URLs into X/Facebook.
 
 ## Step 4 — Push each post (with its sources)
-Replace `SOURCE` with your tool's label (`claude-daily` / `codex-daily` / `cursor`).
-Pass the citations from Step 2 via `--sources` (a JSON array of `{url, title}`), so they
-are saved on the post and shown in the portal panel.
+The script reads `PORTAL_URL` + token from `.env`, so just run it. Replace `SOURCE`
+with your tool's label (`claude-daily` / `codex-daily` / `cursor`). Pass the citations
+from Step 2 via `--sources` (JSON array of `{url, title}`) so they're saved on the post.
 
 ```bash
-PORTAL_URL="$PORTAL_URL" PORTAL_TOKEN="$PORTAL_TOKEN" \
-  node scripts/push-post.mjs --platform linkedin --content "<the linkedin post>" --source SOURCE \
+node scripts/push-post.mjs --platform linkedin --content "<the linkedin post>" --source SOURCE \
   --sources '[{"url":"https://…","title":"BrightLocal 2025 survey"}]'
 
-PORTAL_URL="$PORTAL_URL" PORTAL_TOKEN="$PORTAL_TOKEN" \
-  node scripts/push-post.mjs --platform x --content "<the x post>" --source SOURCE \
+node scripts/push-post.mjs --platform x --content "<the x post>" --source SOURCE \
   --sources '[{"url":"https://…","title":"…"}]'
 
-PORTAL_URL="$PORTAL_URL" PORTAL_TOKEN="$PORTAL_TOKEN" \
-  node scripts/push-post.mjs --platform fb --content "<the facebook post>" --source SOURCE \
+node scripts/push-post.mjs --platform fb --content "<the facebook post>" --source SOURCE \
   --sources '[{"url":"https://…","title":"…"}]'
 ```
 

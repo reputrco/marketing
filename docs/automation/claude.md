@@ -8,28 +8,27 @@ API reference see [`../AUTOMATION.md`](../AUTOMATION.md).
 
 ## 1. One-time setup
 
-Set the two secrets where Claude runs:
+Nothing to export. The repo's `.env` holds both values and the push script reads them:
 
 ```bash
-export PORTAL_URL="https://your-portal.vercel.app"
-export PORTAL_TOKEN="paste-the-PORTAL_API_TOKEN"
+# .env (repo root, gitignored)
+PORTAL_URL=https://reputr-marketing.netlify.app
+PORTAL_API_TOKEN=<the same secret the portal uses>
 ```
 
-- In **Cowork**, add these to the scheduled task's environment / prompt.
-- In **Claude Code**, put them in your shell profile or a local `.env` you source.
+Skills and context live **in this repo** — no plugin install, no portal download:
 
-Optional but recommended: upload `PRODUCT.md` (and any brand-voice notes) to the
-portal's **Docs** panel so every run can pull the same context.
+- Marketing skills → `.claude/skills/<skill>/SKILL.md` (e.g. `social`, `copywriting`).
+- `PRODUCT.md` → in the repo root (product, ICP, value props).
 
 ---
 
 ## 2. Why Claude is the easiest of the three
 
-- The `reputr-marketing` **`social` skill triggers automatically** when you ask for a
+- The `social` skill in `.claude/skills/` **triggers automatically** when you ask for a
   social post — no need to paste skill instructions.
-- Claude has a **shell**, so it can generate the text *and* run the push command in the
-  same session.
-- **Cowork scheduled tasks** give you native daily scheduling with no cron.
+- Claude has a **shell**, so it generates the text *and* runs the push in one session.
+- **Cowork scheduled tasks** give native daily scheduling with no cron.
 
 ---
 
@@ -38,16 +37,16 @@ portal's **Docs** panel so every run can pull the same context.
 Ask Claude:
 
 ```
-Using PRODUCT.md as context, write one LinkedIn post for Reputr about
+Using PRODUCT.md and .claude/skills/social, write one LinkedIn post for Reputr about
 "responding to reviews drives revenue". Then push it to the portal.
 ```
 
-Claude writes the post (via the `social` skill) and runs:
+Claude writes the post and runs (the script auto-loads `.env`):
 
 ```bash
-PORTAL_URL="$PORTAL_URL" PORTAL_TOKEN="$PORTAL_TOKEN" \
-  node scripts/push-post.mjs --platform linkedin \
-  --content "<the generated post>" --source claude-daily
+node scripts/push-post.mjs --platform linkedin \
+  --content "<the generated post>" --source claude-daily \
+  --sources '[{"url":"https://…","title":"…"}]'
 ```
 
 Repeat `--platform x` and `--platform fb` for the full set.
@@ -56,24 +55,27 @@ Repeat `--platform x` and `--platform fb` for the full set.
 
 ## 4. Daily automation (Cowork scheduled task)
 
+> Full scheduling examples for all three tools (native + cron): [`scheduling.md`](scheduling.md).
+
 1. Open Cowork → create a **scheduled task** (e.g. every day at 8:00 am).
 2. Use the ready-made prompt in [`../../scripts/daily-generate.md`](../../scripts/daily-generate.md)
-   — it generates one post per platform and pushes each with `source=claude-daily`.
-3. Make sure `PORTAL_URL` and `PORTAL_TOKEN` are available to the task.
+   — it researches, generates one post per platform, and pushes each with
+   `source=claude-daily` (sources attached).
+3. Make sure the task runs in the repo (so `.env` and the skills are present) with web
+   access enabled.
 
 The task runs unattended; dedup on the portal means an accidental double-run never
 creates duplicates.
 
-> Alternative: in Claude Code you can trigger the same prompt from a local `cron`
-> job that runs `claude -p "<daily-generate prompt>"`.
+> Alternative: in Claude Code, trigger the same prompt from a local `cron` job running
+> `claude -p "<daily-generate prompt>"`.
 
 ---
 
 ## 5. Checklist
 
-- [ ] `PORTAL_URL` / `PORTAL_TOKEN` set
-- [ ] `reputr-marketing` plugin installed (for the `social` skill)
-- [ ] `PRODUCT.md` uploaded to the portal Docs panel
+- [ ] `.env` has `PORTAL_URL` + `PORTAL_API_TOKEN` (script auto-loads them)
+- [ ] Skills present at `.claude/skills/` and `PRODUCT.md` in the repo
 - [ ] Web search enabled — the daily prompt researches real stats and cites sources
-- [ ] Scheduled task points at `scripts/daily-generate.md`
+- [ ] Scheduled task points at `scripts/daily-generate.md`, runs in the repo
 - [ ] Posted with `--source claude-daily` so you can trace it on the board

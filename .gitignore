@@ -15,3 +15,5 @@ next-env.d.ts
 secrets/**
 *.pem
 *.key
+generated-posts/**
+user-scripts/**
